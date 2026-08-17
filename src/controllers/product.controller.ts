@@ -70,6 +70,19 @@ export const update = asyncHandler(async (req, res) => {
   res.json({ product });
 });
 
+export const adjustStock = asyncHandler(async (req, res) => {
+  if (!req.user) throw ApiError.unauthorized();
+  const product = await productService.adjustStock(req.params.id as string, req.body, req.user.id);
+  await logActivity({
+    actor: req.user.id,
+    action: 'product.stockAdjustment',
+    targetType: 'Product',
+    targetId: product.id,
+    metadata: { sku: req.body.sku, delta: req.body.delta, reason: req.body.reason },
+  });
+  res.json({ product });
+});
+
 export const remove = asyncHandler(async (req, res) => {
   if (!req.user) throw ApiError.unauthorized();
   await productService.deleteProduct(req.params.id as string);

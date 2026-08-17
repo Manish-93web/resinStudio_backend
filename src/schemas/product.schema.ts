@@ -120,6 +120,19 @@ export const productQuerySchema = z.object({
 export const idParamSchema = z.object({ id: objectIdSchema });
 export const slugParamSchema = z.object({ slug: z.string().trim().toLowerCase() });
 
+export const stockAdjustmentBodySchema = z
+  .object({
+    sku: z.string().trim().min(1),
+    // Positive to add stock (e.g. restock), negative to remove it (e.g. damage/loss found during
+    // a physical count) - zero is rejected below since it wouldn't be an adjustment at all.
+    delta: z
+      .number()
+      .int()
+      .refine((n) => n !== 0, 'delta must not be 0'),
+    reason: z.string().trim().min(1).max(500),
+  })
+  .openapi('StockAdjustmentRequest');
+
 export const uploadSignatureQuerySchema = z.object({
   folder: z
     .enum(['products', 'reviews', 'damage-claims', 'commissions', 'banners', 'blog'])

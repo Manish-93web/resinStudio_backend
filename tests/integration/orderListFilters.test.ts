@@ -1,5 +1,6 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import { Types } from 'mongoose';
 import { createApp } from '../../src/app';
 import { setupTestDb, teardownTestDb, clearTestDb } from './setup';
 import { Order, type OrderDoc } from '../../src/models/Order';
@@ -36,6 +37,7 @@ async function createOrder(
     guestPhone: string;
     createdAt: Date;
     userId: string;
+    refundAmount: number;
   }>,
 ): Promise<OrderDoc> {
   const order = await Order.create({
@@ -55,6 +57,10 @@ async function createOrder(
     paymentMethod: overrides.paymentMethod ?? 'cod',
     paymentStatus: 'pending',
     status: 'placed',
+    refunds:
+      overrides.refundAmount !== undefined
+        ? [{ amount: overrides.refundAmount, by: new Types.ObjectId(), at: new Date() }]
+        : [],
   });
   if (overrides.createdAt) {
     // Order.updateOne (Mongoose's query API) silently no-ops on `createdAt` here — Mongoose 9's
@@ -173,6 +179,20 @@ describe('GET /api/orders admin list filters', () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toHaveLength(1);
     expect(res.body.data[0].orderNumber).toBe('RS-STATUS-TEST');
+  });
+
+  it('returns totalRevenue for the filtered set, net of refunds', async () => {
+    await createOrder({ orderNumber: 'RS-REV-COD-1', paymentMethod: 'cod' }); // 500
+    await createOrder({ orderNumber: 'RS-REV-COD-2', paymentMethod: 'cod', refundAmount: 200 }); // 300 net
+    await createOrder({ orderNumber: 'RS-REV-RZP', paymentMethod: 'razorpay' }); // excluded by filter below
+
+    const token = await loginAs('owner');
+    const res = await request(app)
+      .get('/api/orders?paymentMethod=cod')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+    expect(res.body.totalRevenue).toBe(800);
   });
 
   it('rejects a malformed dateFrom with a 400 (validated query)', async () => {

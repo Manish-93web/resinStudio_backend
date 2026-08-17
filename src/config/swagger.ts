@@ -15,6 +15,7 @@ import {
   slugParamSchema,
   idParamSchema as productIdParamSchema,
   uploadSignatureQuerySchema,
+  stockAdjustmentBodySchema,
 } from '../schemas/product.schema';
 import {
   createCategoryBodySchema,
@@ -279,6 +280,23 @@ registry.registerPath({
 });
 
 registry.registerPath({
+  method: 'post',
+  path: '/products/{id}/stock-adjustments',
+  tags: ['Products'],
+  summary: "Manually adjust a variant's stock (restock/count correction/write-off) [manager/owner]",
+  security: [{ bearerAuth: [] }],
+  request: {
+    params: productIdParamSchema,
+    body: { content: { 'application/json': { schema: stockAdjustmentBodySchema } } },
+  },
+  responses: {
+    200: { description: 'Product with updated stock + adjustment history' },
+    400: { description: 'Adjustment would result in negative stock' },
+    404: { description: 'Product or variant not found' },
+  },
+});
+
+registry.registerPath({
   method: 'get',
   path: '/categories',
   tags: ['Categories'],
@@ -413,7 +431,9 @@ registry.registerPath({
   summary: 'List all orders, with date/payment-method/text filters [staff/manager/owner]',
   security: [{ bearerAuth: [] }],
   request: { query: orderListQuerySchema },
-  responses: { 200: { description: 'Paginated order list' } },
+  responses: {
+    200: { description: 'Paginated order list, plus totalRevenue for the filtered set' },
+  },
 });
 
 registry.registerPath({

@@ -1,4 +1,4 @@
-import { QueryFilter } from 'mongoose';
+import { QueryFilter, Types } from 'mongoose';
 import { Product, type ProductAttrs, type ProductDoc } from '../models/Product';
 import { ApiError } from '../utils/apiError';
 import { parsePagination, buildPaginatedResult, type PaginatedResult } from '../utils/pagination';
@@ -81,6 +81,42 @@ export async function updateProduct(id: string, input: Partial<ProductAttrs>): P
   }
 
   Object.assign(product, input);
+  await product.save();
+  await afterProductWrite(product);
+  return product;
+}
+
+/** Manual stock adjustment (restock, physical-count correction, damage/loss write-off) - unlike
+ *  the automatic decrement on checkout (order.service.ts), this is an explicit admin action with a
+ *  human-entered reason, recorded in `stockAdjustments` for an auditable history rather than
+ *  silently mutating `variants[].stock`. */
+export async function adjustStock(
+  id: string,
+  input: { sku: string; delta: number; reason: string },
+  actorId: string,
+): Promise<ProductDoc> {
+  const product = await Product.findById(id);
+  if (!product) throw ApiError.notFound('Product not found');
+
+  const variant = product.variants.find((v) => v.sku === input.sku);
+  if (!variant) throw ApiError.notFound(`Variant "${input.sku}" not found on this product`);
+
+  const newStock = variant.stock + input.delta;
+  if (newStock < 0) {
+    throw ApiError.badRequest(
+      `Adjustment would result in negative stock (current: ${variant.stock}, delta: ${input.delta})`,
+    );
+  }
+
+  variant.stock = newStock;
+  product.stockAdjustments.push({
+    sku: input.sku,
+    delta: input.delta,
+    reason: input.reason,
+    by: new Types.ObjectId(actorId),
+    at: new Date(),
+  });
+
   await product.save();
   await afterProductWrite(product);
   return product;

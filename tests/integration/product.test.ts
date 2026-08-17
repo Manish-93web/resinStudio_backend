@@ -294,3 +294,88 @@ describe('Rich-text XSS defense: description is sanitized on write', () => {
     expect(updateRes.body.product.description).not.toContain('<script');
   });
 });
+
+describe('Manual stock adjustments', () => {
+  async function createTestProduct(token: string) {
+    const res = await request(app)
+      .post('/api/products')
+      .set('Authorization', `Bearer ${token}`)
+      .send(validProduct);
+    return res.body.product._id as string;
+  }
+
+  it('lets a manager restock a variant and records it in stockAdjustments history', async () => {
+    const token = await loginAs('manager');
+    const productId = await createTestProduct(token);
+
+    const res = await request(app)
+      .post(`/api/products/${productId}/stock-adjustments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'TEST-001', delta: 10, reason: 'Restocked from supplier' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.product.variants[0].stock).toBe(15); // started at 5
+    expect(res.body.product.stockAdjustments).toHaveLength(1);
+    expect(res.body.product.stockAdjustments[0]).toMatchObject({
+      sku: 'TEST-001',
+      delta: 10,
+      reason: 'Restocked from supplier',
+    });
+  });
+
+  it('lets a negative delta reduce stock (e.g. damage write-off)', async () => {
+    const token = await loginAs('owner');
+    const productId = await createTestProduct(token);
+
+    const res = await request(app)
+      .post(`/api/products/${productId}/stock-adjustments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'TEST-001', delta: -3, reason: 'Damaged in storage' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.product.variants[0].stock).toBe(2); // started at 5
+  });
+
+  it('rejects an adjustment that would go negative', async () => {
+    const token = await loginAs('manager');
+    const productId = await createTestProduct(token);
+
+    const res = await request(app)
+      .post(`/api/products/${productId}/stock-adjustments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'TEST-001', delta: -100, reason: 'Too many' });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('404s for an unknown variant sku', async () => {
+    const token = await loginAs('manager');
+    const productId = await createTestProduct(token);
+
+    const res = await request(app)
+      .post(`/api/products/${productId}/stock-adjustments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ sku: 'NOT-A-REAL-SKU', delta: 1, reason: 'x' });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('blocks staff (read-only) and customers from adjusting stock', async () => {
+    const ownerToken = await loginAs('owner');
+    const productId = await createTestProduct(ownerToken);
+
+    const staffToken = await loginAs('staff');
+    const staffRes = await request(app)
+      .post(`/api/products/${productId}/stock-adjustments`)
+      .set('Authorization', `Bearer ${staffToken}`)
+      .send({ sku: 'TEST-001', delta: 1, reason: 'x' });
+    expect(staffRes.status).toBe(403);
+
+    const customerToken = await loginAs('customer');
+    const customerRes = await request(app)
+      .post(`/api/products/${productId}/stock-adjustments`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ sku: 'TEST-001', delta: 1, reason: 'x' });
+    expect(customerRes.status).toBe(403);
+  });
+});

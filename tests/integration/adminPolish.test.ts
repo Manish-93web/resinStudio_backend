@@ -1,9 +1,11 @@
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
+import { Types } from 'mongoose';
 import { createApp } from '../../src/app';
 import { setupTestDb, teardownTestDb, clearTestDb } from './setup';
 import { User } from '../../src/models/User';
 import { Product } from '../../src/models/Product';
+import { Order } from '../../src/models/Order';
 
 const app = createApp();
 
@@ -178,6 +180,42 @@ describe('Dashboard stats', () => {
     expect(res.body.needsAttention.lowStockCount).toBe(1);
     expect(res.body.lowStock[0].sku).toBe('LOW-1');
   });
+
+  it('excludes returned orders and nets out refunds from revenue', async () => {
+    const address = { line1: 'x', city: 'x', state: 'x', pincode: '123456', phone: '9876543210' };
+    const baseOrder = {
+      items: [{ title: 'Revenue Test Item', qty: 1, price: 1000 }],
+      subtotal: 1000,
+      discount: 0,
+      shipping: 0,
+      tax: 0,
+      total: 1000,
+      shippingAddress: address,
+      billingAddress: address,
+      paymentMethod: 'cod' as const,
+      paymentStatus: 'paid' as const,
+      timeline: [{ status: 'delivered' as const, at: new Date() }],
+    };
+    // Counts in full: a normal delivered order with no refund.
+    await Order.create({ ...baseOrder, orderNumber: 'RS-TEST-FULL', status: 'delivered' });
+    // Excluded entirely: order was returned.
+    await Order.create({ ...baseOrder, orderNumber: 'RS-TEST-RETURNED', status: 'returned' });
+    // Counts net of its refund only (1000 - 400 = 600), not the full 1000.
+    await Order.create({
+      ...baseOrder,
+      orderNumber: 'RS-TEST-PARTIAL-REFUND',
+      status: 'delivered',
+      refunds: [{ amount: 400, by: new Types.ObjectId(), at: new Date() }],
+    });
+
+    const { token } = await loginAs('owner');
+    const res = await request(app)
+      .get('/api/admin/dashboard/stats?days=30')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.summary.orders).toBe(2); // the returned order isn't counted at all
+    expect(res.body.summary.revenue).toBe(1600); // 1000 (full) + 600 (net of refund)
+  });
 });
 
 describe('Staff management', () => {
@@ -240,15 +278,12 @@ describe('Staff management', () => {
 describe('Activity log', () => {
   it('records staff creation and order status changes, readable by staff', async () => {
     const { token: ownerToken } = await loginAs('owner');
-    await request(app)
-      .post('/api/admin/staff')
-      .set('Authorization', `Bearer ${ownerToken}`)
-      .send({
-        name: 'Logged Staffer',
-        email: 'logged-staffer@example.com',
-        password: 'password123',
-        role: 'staff',
-      });
+    await request(app).post('/api/admin/staff').set('Authorization', `Bearer ${ownerToken}`).send({
+      name: 'Logged Staffer',
+      email: 'logged-staffer@example.com',
+      password: 'password123',
+      role: 'staff',
+    });
 
     const { token: staffToken } = await loginAs('staff', 'reader@example.com');
     const res = await request(app)
@@ -266,5 +301,41 @@ describe('Activity log', () => {
       .get('/api/admin/activity')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(403);
+  });
+});
+
+describe('Customer lifetime value', () => {
+  it('excludes returned orders and nets out refunds, matching dashboard revenue logic', async () => {
+    const { userId: customerId } = await loginAs('customer', 'ltv-customer@example.com');
+    const address = { line1: 'x', city: 'x', state: 'x', pincode: '123456', phone: '9876543210' };
+    const baseOrder = {
+      user: customerId,
+      items: [{ title: 'LTV Test Item', qty: 1, price: 1000 }],
+      subtotal: 1000,
+      discount: 0,
+      shipping: 0,
+      tax: 0,
+      total: 1000,
+      shippingAddress: address,
+      billingAddress: address,
+      paymentMethod: 'cod' as const,
+      paymentStatus: 'paid' as const,
+      timeline: [{ status: 'delivered' as const, at: new Date() }],
+    };
+    await Order.create({ ...baseOrder, orderNumber: 'RS-LTV-FULL', status: 'delivered' });
+    await Order.create({ ...baseOrder, orderNumber: 'RS-LTV-RETURNED', status: 'returned' });
+    await Order.create({
+      ...baseOrder,
+      orderNumber: 'RS-LTV-PARTIAL-REFUND',
+      status: 'delivered',
+      refunds: [{ amount: 400, by: new Types.ObjectId(), at: new Date() }],
+    });
+
+    const { token } = await loginAs('staff', 'ltv-staff@example.com');
+    const res = await request(app)
+      .get(`/api/admin/customers/${customerId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.lifetimeValue).toBe(1600); // 1000 (full) + 600 (net of refund), returned excluded
   });
 });

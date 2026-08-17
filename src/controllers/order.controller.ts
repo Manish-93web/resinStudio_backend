@@ -72,11 +72,26 @@ export const listAll = asyncHandler(async (req, res) => {
     ];
   }
 
-  const [data, total] = await Promise.all([
+  const [data, total, revenueAgg] = await Promise.all([
     Order.find(filter).sort(pagination.sort).skip(pagination.skip).limit(pagination.limit),
     Order.countDocuments(filter),
+    // Net total (order total minus any refunds against it) for every order matching the current
+    // filter, not just the current page - lets the admin see "what's this filtered view worth"
+    // without paging through every row. Deliberately respects whatever status filter is active
+    // (e.g. filtering to `cancelled` correctly nets to ~0) rather than re-imposing the dashboard's
+    // own fixed cancelled/returned exclusion - see dashboard.service.ts for that separate figure.
+    Order.aggregate([
+      { $match: filter },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $subtract: ['$total', { $sum: '$refunds.amount' }] } },
+        },
+      },
+    ]),
   ]);
-  res.json(buildPaginatedResult(data, total, pagination));
+  const totalRevenue = (revenueAgg[0]?.total as number | undefined) ?? 0;
+  res.json({ ...buildPaginatedResult(data, total, pagination), totalRevenue });
 });
 
 export const getOne = asyncHandler(async (req, res) => {

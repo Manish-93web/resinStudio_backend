@@ -9,6 +9,7 @@ import {
   productQuerySchema,
   idParamSchema,
   slugParamSchema,
+  stockAdjustmentBodySchema,
 } from '../schemas/product.schema';
 
 export const productRouter = Router();
@@ -46,6 +47,13 @@ productRouter.put(
   requireRole('manager', 'owner'),
   validate({ params: idParamSchema, body: updateProductBodySchema }),
   productController.update,
+);
+productRouter.post(
+  '/:id/stock-adjustments',
+  requireAuth,
+  requireRole('manager', 'owner'),
+  validate({ params: idParamSchema, body: stockAdjustmentBodySchema }),
+  productController.adjustStock,
 );
 productRouter.delete(
   '/:id',
