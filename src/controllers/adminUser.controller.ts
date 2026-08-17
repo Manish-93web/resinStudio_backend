@@ -29,9 +29,11 @@ export const getOne = asyncHandler(async (req, res) => {
   if (!user) throw ApiError.notFound('Customer not found');
 
   const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 });
+  // Mirrors dashboard.service.ts's revenue logic: excludes cancelled/returned orders, and nets
+  // out any refunds so a partially/fully refunded order doesn't still count its pre-refund total.
   const lifetimeValue = orders
-    .filter((o) => o.status !== 'cancelled')
-    .reduce((sum, o) => sum + o.total, 0);
+    .filter((o) => o.status !== 'cancelled' && o.status !== 'returned')
+    .reduce((sum, o) => sum + o.total - o.refunds.reduce((r, refund) => r + refund.amount, 0), 0);
 
   res.json({ user: serializeCustomerForAdmin(user), orders, lifetimeValue });
 });

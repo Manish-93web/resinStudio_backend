@@ -53,9 +53,13 @@ export interface DashboardStats {
 
 export async function getDashboardStats(rangeDays: number): Promise<DashboardStats> {
   const since = new Date(Date.now() - rangeDays * 24 * 60 * 60 * 1000);
-  // Cancelled orders never happened commercially, so they're excluded from every revenue-derived
-  // figure below - counting them would overstate real sales.
-  const revenueMatch = { createdAt: { $gte: since }, status: { $ne: 'cancelled' } };
+  // Cancelled and returned orders never resulted in retained revenue, so they're excluded from
+  // every revenue-derived figure below - counting them would overstate real sales.
+  const revenueMatch = { createdAt: { $gte: since }, status: { $nin: ['cancelled', 'returned'] } };
+  // Per-order net revenue = total minus whatever's been refunded against it (a `delivered` order
+  // can still carry a partial/full refund, e.g. from a damage claim, without its status changing) -
+  // `{$sum: '$refunds.amount'}` sums the Refund subdocuments' amounts for a single order document.
+  const netRevenueExpr = { $subtract: ['$total', { $sum: '$refunds.amount' }] };
 
   const [
     revenueSeriesRaw,
@@ -73,7 +77,7 @@ export async function getDashboardStats(rangeDays: number): Promise<DashboardSta
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
-          revenue: { $sum: '$total' },
+          revenue: { $sum: netRevenueExpr },
           orders: { $sum: 1 },
         },
       },
