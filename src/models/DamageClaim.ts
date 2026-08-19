@@ -13,6 +13,11 @@ export interface DamageClaimAttrs {
   product: Types.ObjectId;
   submittedBy?: Types.ObjectId | null;
   photos: string[];
+  // Optional unboxing/damage video alongside the required photos - additive evidence, not a
+  // replacement requirement (see COMPETITOR_CHECKOUT_AUDIT.md's stricter mandatory-video rule,
+  // deliberately not matched here to avoid losing legitimate claims from customers who can't
+  // easily produce one).
+  videoUrl?: string;
   description: string;
   status: DamageClaimStatus;
   reviewedBy?: Types.ObjectId;
@@ -34,6 +39,7 @@ const damageClaimSchema = new Schema<DamageClaimAttrs>(
         message: 'At least one photo is required',
       },
     },
+    videoUrl: { type: String },
     description: { type: String, required: true, trim: true },
     status: { type: String, enum: DAMAGE_CLAIM_STATUSES, default: 'pending', index: true },
     reviewedBy: { type: Schema.Types.ObjectId, ref: 'User' },

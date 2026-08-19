@@ -26,6 +26,7 @@ export interface CheckoutIntentAttrs {
   // createOrderFromCart once payment is confirmed (Razorpay/Stripe both create an intent first,
   // then fulfill it asynchronously via verify-callback or webhook).
   redeemPoints?: number;
+  shippingMethod?: 'standard' | 'express';
   fulfilled: boolean;
   createdAt: Date;
 }
@@ -44,6 +45,7 @@ const checkoutIntentSchema = new Schema<CheckoutIntentAttrs>({
   billingAddress: { type: addressSchema, required: true },
   couponCode: { type: String },
   redeemPoints: { type: Number, min: 0 },
+  shippingMethod: { type: String, enum: ['standard', 'express'] },
   fulfilled: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now, expires: 60 * 60 * 24 },
 });

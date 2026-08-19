@@ -43,6 +43,19 @@ interface CheckoutParams {
   // Loyalty points the customer wants to redeem against this order (§17 Phase 3) - validated
   // against the user's current balance, capped so it can never take the order below zero.
   redeemPoints?: number;
+  shippingMethod?: 'standard' | 'express';
+}
+
+/** `Settings.prepaidDiscountPercent` off the subtotal, applied automatically for any non-COD
+ *  payment method - a store-wide incentive (not a coupon code), same shape as the tax calculation
+ *  just above. 0 (the default) makes this a no-op. */
+function computePrepaidDiscount(
+  subtotal: number,
+  paymentMethod: 'cod' | 'razorpay' | 'stripe',
+  settings: SettingsDoc,
+): number {
+  if (paymentMethod === 'cod' || settings.prepaidDiscountPercent <= 0) return 0;
+  return Math.round(subtotal * (settings.prepaidDiscountPercent / 100) * 100) / 100;
 }
 
 const DEFAULT_LINE_WEIGHT_GRAMS = 250;
@@ -59,6 +72,7 @@ export function computeShippingAndTax(
   allItemsTaxExempt: boolean,
   isInternational: boolean,
   settings: SettingsDoc,
+  shippingMethod: 'standard' | 'express' = 'standard',
 ): { shipping: number; tax: number } {
   let shipping: number;
   if (isInternational) {
@@ -71,6 +85,12 @@ export function computeShippingAndTax(
     const tiers = settings.shipping.weightTiers;
     const matchedTier = tiers.find((t) => t.maxGrams >= totalWeightGrams);
     shipping = matchedTier?.rate ?? tiers[tiers.length - 1]?.rate ?? settings.shipping.flatRate;
+  }
+  // Express is a flat surcharge on top of whatever the standard rate resolved to (including free
+  // shipping) - a customer who'd otherwise get free shipping still pays for the faster upgrade,
+  // they just pay only the surcharge rather than surcharge-on-top-of-a-paid-rate.
+  if (shippingMethod === 'express') {
+    shipping += settings.shipping.expressRate;
   }
 
   // A cart where every resolved product is tax-exempt owes no tax at all; otherwise the existing
@@ -96,7 +116,16 @@ export async function previewCheckoutTotal(params: {
   sessionId?: string;
   shippingAddress: Address;
   couponCode?: string;
-}): Promise<{ subtotal: number; discount: number; shipping: number; tax: number; total: number }> {
+  paymentMethod?: 'cod' | 'razorpay' | 'stripe';
+  shippingMethod?: 'standard' | 'express';
+}): Promise<{
+  subtotal: number;
+  discount: number;
+  prepaidDiscount: number;
+  shipping: number;
+  tax: number;
+  total: number;
+}> {
   const cartFilter = params.userId ? { user: params.userId } : { sessionId: params.sessionId };
   const cart = await Cart.findOne(cartFilter);
   if (!cart || cart.items.length === 0) throw ApiError.badRequest('Your cart is empty');
@@ -134,6 +163,12 @@ export async function previewCheckoutTotal(params: {
     const result = await validateCoupon(params.couponCode, subtotal, params.userId);
     discount = result.discount;
   }
+  const prepaidDiscount = computePrepaidDiscount(
+    subtotal,
+    params.paymentMethod ?? 'razorpay',
+    settings,
+  );
+  discount += prepaidDiscount;
 
   const isInternational =
     (params.shippingAddress.country ?? 'India').trim().toLowerCase() !== 'india';
@@ -144,10 +179,11 @@ export async function previewCheckoutTotal(params: {
     allItemsTaxExempt,
     isInternational,
     settings,
+    params.shippingMethod,
   );
   const total = Math.max(0, subtotal - discount + shipping + tax);
 
-  return { subtotal, discount, shipping, tax, total };
+  return { subtotal, discount, prepaidDiscount, shipping, tax, total };
 }
 
 export class StockConflictError extends ApiError {
@@ -291,6 +327,7 @@ export async function createOrderFromCart(params: CheckoutParams): Promise<Order
         discount = result.discount;
         appliedCoupon = result.coupon;
       }
+      discount += computePrepaidDiscount(subtotal, params.paymentMethod, settings);
 
       // International is decided purely off the shipping address, not the buyer's account -
       // defaults to India (this store's home market) when no country is supplied.
@@ -304,6 +341,7 @@ export async function createOrderFromCart(params: CheckoutParams): Promise<Order
         allItemsTaxExempt,
         isInternational,
         settings,
+        params.shippingMethod,
       );
       const totalBeforeLoyalty = Math.max(0, subtotal - discount + shipping + tax);
 
@@ -401,6 +439,7 @@ export async function createOrderFromCart(params: CheckoutParams): Promise<Order
             isInternational,
             shippingAddress: params.shippingAddress,
             billingAddress: params.billingAddress,
+            shippingMethod: params.shippingMethod ?? 'standard',
             paymentMethod: fullyPaidByGiftCard ? 'gift_card' : params.paymentMethod,
             paymentStatus: fullyPaidByGiftCard || isOnlinePayment ? 'paid' : 'pending',
             paymentRef: params.paymentRef,

@@ -6,6 +6,7 @@ export const submitDamageClaimBodySchema = z
   .object({
     productId: objectIdSchema,
     photos: z.array(z.string().url()).min(1, 'At least one photo is required').max(8),
+    videoUrl: z.string().url().optional(),
     description: z.string().trim().min(1).max(2000),
   })
   .openapi('SubmitDamageClaimRequest');

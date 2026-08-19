@@ -27,6 +27,7 @@ export const checkout = asyncHandler(async (req, res) => {
     couponCode: req.body.couponCode,
     giftCardCode: req.body.giftCardCode,
     redeemPoints: req.body.redeemPoints,
+    shippingMethod: req.body.shippingMethod,
   });
 
   res.status(201).json({ order });

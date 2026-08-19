@@ -22,6 +22,7 @@ interface CreateCheckoutOrderParams {
   billingAddress: Address;
   couponCode?: string;
   redeemPoints?: number;
+  shippingMethod?: 'standard' | 'express';
 }
 
 function requireRazorpay() {
@@ -75,6 +76,8 @@ export async function createCheckoutOrder(params: CreateCheckoutOrderParams) {
     sessionId: params.sessionId,
     shippingAddress: params.shippingAddress,
     couponCode: params.couponCode,
+    paymentMethod: 'razorpay',
+    shippingMethod: params.shippingMethod,
   });
   const loyaltyDiscount = await previewLoyaltyDiscount(
     params.userId,
@@ -101,6 +104,7 @@ export async function createCheckoutOrder(params: CreateCheckoutOrderParams) {
     billingAddress: params.billingAddress,
     couponCode: params.couponCode,
     redeemPoints: params.redeemPoints,
+    shippingMethod: params.shippingMethod,
   });
 
   return {
@@ -124,6 +128,8 @@ export async function createStripePaymentIntent(params: CreateCheckoutOrderParam
     sessionId: params.sessionId,
     shippingAddress: params.shippingAddress,
     couponCode: params.couponCode,
+    paymentMethod: 'stripe',
+    shippingMethod: params.shippingMethod,
   });
   const loyaltyDiscount = await previewLoyaltyDiscount(
     params.userId,
@@ -152,6 +158,7 @@ export async function createStripePaymentIntent(params: CreateCheckoutOrderParam
     billingAddress: params.billingAddress,
     couponCode: params.couponCode,
     redeemPoints: params.redeemPoints,
+    shippingMethod: params.shippingMethod,
   });
 
   return {
@@ -209,6 +216,7 @@ async function fulfillCheckoutIntent(
       paymentRef,
       couponCode: intent.couponCode,
       redeemPoints: intent.redeemPoints,
+      shippingMethod: intent.shippingMethod,
     });
     intent.fulfilled = true;
     await intent.save();

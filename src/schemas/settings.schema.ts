@@ -31,8 +31,10 @@ export const updateSettingsBodySchema = z
         weightTiers: z.array(weightTierSchema).optional(),
         internationalRate: z.number().nonnegative().optional(),
         internationalFreeShippingThreshold: z.number().nonnegative().optional(),
+        expressRate: z.number().nonnegative().optional(),
       })
       .optional(),
+    prepaidDiscountPercent: z.number().min(0).max(100).optional(),
     taxRatePercent: z.number().min(0).max(100).optional(),
     commissionDepositPercent: z.number().min(1).max(100).optional(),
     notificationTemplates: z

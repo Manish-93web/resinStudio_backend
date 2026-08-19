@@ -33,7 +33,15 @@ export interface SettingsAttrs {
     internationalRate: number;
     // Undefined means international shipping is never free.
     internationalFreeShippingThreshold?: number;
+    // Flat surcharge added on top of the computed standard rate when a customer opts into express
+    // delivery at checkout (order.service.ts#computeShippingAndTax). 0 effectively hides the option
+    // (still selectable, just free - admins can set a real value to activate it meaningfully).
+    expressRate: number;
   };
+  // Percentage knocked off the subtotal when the customer pays online (Razorpay/Stripe) instead of
+  // COD - a store-wide incentive, not a coupon code, applied automatically in
+  // order.service.ts#createOrderFromCart. 0 disables it.
+  prepaidDiscountPercent: number;
   taxRatePercent: number;
   // Configurable deposit percentage charged upfront when a commission quote is accepted (§6.8) -
   // the balance is charged before shipping.
@@ -117,7 +125,9 @@ const settingsSchema = new Schema<SettingsAttrs>(
       },
       internationalRate: { type: Number, required: true, default: 999, min: 0 },
       internationalFreeShippingThreshold: { type: Number, min: 0 },
+      expressRate: { type: Number, required: true, default: 0, min: 0 },
     },
+    prepaidDiscountPercent: { type: Number, required: true, default: 0, min: 0, max: 100 },
     taxRatePercent: { type: Number, required: true, default: 0, min: 0, max: 100 },
     commissionDepositPercent: { type: Number, required: true, default: 50, min: 1, max: 100 },
     notificationTemplates: {

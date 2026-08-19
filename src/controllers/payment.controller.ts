@@ -14,6 +14,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     billingAddress: req.body.billingAddress ?? req.body.shippingAddress,
     couponCode: req.body.couponCode,
     redeemPoints: req.body.redeemPoints,
+    shippingMethod: req.body.shippingMethod,
   });
   res.json(result);
 });
@@ -43,6 +44,7 @@ export const createStripeIntent = asyncHandler(async (req, res) => {
     billingAddress: req.body.billingAddress ?? req.body.shippingAddress,
     couponCode: req.body.couponCode,
     redeemPoints: req.body.redeemPoints,
+    shippingMethod: req.body.shippingMethod,
   });
   res.json(result);
 });

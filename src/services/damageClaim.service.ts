@@ -18,7 +18,7 @@ const CLAIM_WINDOW_HOURS = 72;
 export async function submitDamageClaim(
   orderId: string,
   userId: string,
-  input: { productId: string; photos: string[]; description: string },
+  input: { productId: string; photos: string[]; videoUrl?: string; description: string },
 ): Promise<DamageClaimDoc> {
   const order = await Order.findById(orderId);
   if (!order) throw ApiError.notFound('Order not found');
@@ -52,6 +52,7 @@ export async function submitDamageClaim(
     product: input.productId,
     submittedBy: userId,
     photos: input.photos,
+    videoUrl: input.videoUrl,
     description: input.description,
     status: 'pending',
   });

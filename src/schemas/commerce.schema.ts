@@ -65,6 +65,7 @@ export const checkoutBodySchema = z
     giftCardCode: z.string().trim().optional(),
     paymentMethod: z.enum(['razorpay', 'cod']),
     redeemPoints: z.number().int().nonnegative().optional(),
+    shippingMethod: z.enum(['standard', 'express']).optional(),
   })
   .openapi('CheckoutRequest');
 

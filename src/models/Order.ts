@@ -82,6 +82,11 @@ export interface OrderAttrs {
   couponCode?: string;
   shippingAddress: Address;
   billingAddress: Address;
+  // Surcharge-priced upgrade chosen at checkout (order.service.ts's computeShippingAndTax) -
+  // stored on the order itself, not just derived from `shipping`, so fulfillment/admin can tell a
+  // customer paid for express without re-deriving it from the rate that happened to be configured
+  // at order time.
+  shippingMethod: 'standard' | 'express';
   paymentMethod: PaymentMethod;
   paymentStatus: PaymentStatus;
   paymentRef?: string;
@@ -177,6 +182,7 @@ const orderSchema = new Schema<OrderAttrs>(
     couponCode: { type: String },
     shippingAddress: { type: addressSchema, required: true },
     billingAddress: { type: addressSchema, required: true },
+    shippingMethod: { type: String, enum: ['standard', 'express'], default: 'standard' },
     paymentMethod: { type: String, enum: PAYMENT_METHODS, required: true },
     paymentStatus: { type: String, enum: PAYMENT_STATUSES, default: 'pending' },
     paymentRef: { type: String },

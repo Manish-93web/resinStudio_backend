@@ -23,7 +23,9 @@ export async function updateSettings(
       weightTiers?: { maxGrams: number; rate: number }[];
       internationalRate?: number;
       internationalFreeShippingThreshold?: number;
+      expressRate?: number;
     };
+    prepaidDiscountPercent: number;
     taxRatePercent: number;
     commissionDepositPercent: number;
     notificationTemplates: {
@@ -101,6 +103,8 @@ export async function getPublicSettings(): Promise<{
   supportPhone?: string;
   gstin?: string;
   socialLinks: { instagram?: string; facebook?: string; pinterest?: string; youtube?: string };
+  prepaidDiscountPercent: number;
+  expressShippingRate: number;
 }> {
   const settings = await getSettings();
   return {
@@ -109,5 +113,10 @@ export async function getPublicSettings(): Promise<{
     supportPhone: settings.supportPhone,
     gstin: settings.gstin,
     socialLinks: settings.socialLinks,
+    // Exposed publicly (unlike the rest of `shipping`, which stays server-side-only so the actual
+    // rate isn't shown pre-order) because checkout needs to advertise "save X% online" and the
+    // express surcharge amount before a guest has authenticated or placed anything.
+    prepaidDiscountPercent: settings.prepaidDiscountPercent,
+    expressShippingRate: settings.shipping.expressRate,
   };
 }
