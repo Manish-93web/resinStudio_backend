@@ -50,6 +50,13 @@ import { generateOpenApiDocument } from './config/swagger';
 export function createApp(): Express {
   const app = express();
 
+  // Render (like Heroku/Railway) puts every request through exactly one reverse-proxy hop before
+  // it reaches this process. Without this, req.ip resolves to the proxy's own address for every
+  // request (not the real client), which breaks rate-limiting (middleware/rateLimiter.ts) — recent
+  // express-rate-limit versions throw at request time when they detect an X-Forwarded-For header
+  // arriving without a matching trust-proxy setting, rather than silently misbehaving.
+  app.set('trust proxy', 1);
+
   app.disable('x-powered-by');
   app.use(helmet());
   app.use(
