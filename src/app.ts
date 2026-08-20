@@ -79,12 +79,14 @@ export function createApp(): Express {
   // Serves generated/uploaded assets directly from disk when Cloudinary isn't configured (see
   // BACKEND_PUBLIC_URL in config/env.ts and scripts/generateProductImages.ts) - static files only,
   // no auth/session state involved, so this is safe to mount ahead of cookie/body middleware.
-  // Two levels up, not one: tsc's rootDir is the repo root (not src/, since scripts/ and tests/
-  // are compiled too - see tsconfig.json), so this file's compiled output sits at dist/src/app.js,
-  // not dist/app.js. One level up only reached dist/public (never created - tsc doesn't copy
-  // static assets), which is why product images 404'd on Render even though public/generated/ is
-  // committed to the repo and the correct host was being requested.
-  app.use('/static', express.static(path.join(__dirname, '..', '..', 'public')));
+  // process.cwd(), not __dirname: __dirname differs between `npm run dev` (tsx runs src/app.ts
+  // directly, __dirname = <repo>/src) and `npm start` (node runs the compiled dist/src/app.js,
+  // __dirname = <repo>/dist/src) - a fixed number of '..' hops can only ever be correct for one of
+  // those two contexts. npm always invokes both scripts with the repo root as the working
+  // directory, so process.cwd() is reliable in either case. (A prior fix used
+  // path.join(__dirname, '..', '..', 'public'), which fixed the production 404s but broke local
+  // dev the same way the original path.join(__dirname, '..', 'public') had broken production.)
+  app.use('/static', express.static(path.join(process.cwd(), 'public')));
   app.use(cookieParser(env.COOKIE_SECRET));
   app.use(mongoSanitize());
   app.use(
