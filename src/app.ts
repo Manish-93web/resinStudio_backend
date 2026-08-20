@@ -79,7 +79,12 @@ export function createApp(): Express {
   // Serves generated/uploaded assets directly from disk when Cloudinary isn't configured (see
   // BACKEND_PUBLIC_URL in config/env.ts and scripts/generateProductImages.ts) - static files only,
   // no auth/session state involved, so this is safe to mount ahead of cookie/body middleware.
-  app.use('/static', express.static(path.join(__dirname, '..', 'public')));
+  // Two levels up, not one: tsc's rootDir is the repo root (not src/, since scripts/ and tests/
+  // are compiled too - see tsconfig.json), so this file's compiled output sits at dist/src/app.js,
+  // not dist/app.js. One level up only reached dist/public (never created - tsc doesn't copy
+  // static assets), which is why product images 404'd on Render even though public/generated/ is
+  // committed to the repo and the correct host was being requested.
+  app.use('/static', express.static(path.join(__dirname, '..', '..', 'public')));
   app.use(cookieParser(env.COOKIE_SECRET));
   app.use(mongoSanitize());
   app.use(
